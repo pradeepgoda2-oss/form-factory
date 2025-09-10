@@ -1,0 +1,94 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+}
+
+model Question {
+  id        String         @id @default(cuid())
+  label     String
+  helpText  String?
+  type      QuestionType
+  required  Boolean        @default(false)
+  options   Option[]
+  createdAt DateTime       @default(now())
+  formLinks FormQuestion[]
+  Answer    Answer[]
+}
+
+model Form {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  title       String
+  description String?
+  createdAt   DateTime       @default(now())
+  questions   FormQuestion[]
+  responses   Response[]
+}
+
+model FormQuestion {
+  id         String @id @default(cuid())
+  formId     String
+  questionId String
+  sortOrder  Int    @default(0)
+  rowSpan    Int    @default(1)
+  colSpan    Int    @default(1)
+
+  form     Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, questionId])
+}
+
+model Option {
+  id         String   @id @default(cuid())
+  questionId String
+  label      String
+  value      String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model Response {
+  id        String   @id @default(cuid())
+  formId    String
+  userEmail String?            // <— add this line
+  createdAt DateTime @default(now())
+  answers   Answer[]
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId, createdAt])
+}
+
+model Answer {
+  id         String  @id @default(cuid())
+  responseId String
+  questionId String
+  value      String?
+
+  response Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, questionId])
+}
+
+enum QuestionType {
+  text
+  textarea
+  radio
+  checkbox
+  select
+  number
+  date
+}
