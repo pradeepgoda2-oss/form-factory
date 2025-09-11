@@ -1,70 +1,133 @@
-export const runtime = 'nodejs'
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+// DELETE /api/questions/:id
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
+  const id = params?.id;
+  if (!id) {
+    return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  }
 
-type Ctx = { params: { id: string } }
-
-/** Delete a question */
-export async function DELETE(_req: Request, { params }: Ctx) {
   try {
-    await prisma.question.delete({ where: { id: params.id } })
-    return NextResponse.json({ ok: true })
-  } catch (e) {
-    console.error('DELETE /api/questions/:id error:', e)
-    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 })
+    await prisma.question.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err: unknown) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === "P2025") {
+        // Record not found
+        return NextResponse.json({ error: "Question not found" }, { status: 404 });
+      }
+      if (err.code === "P2003") {
+        // Foreign key constraint (related rows exist)
+        return NextResponse.json(
+          { error: "Cannot delete: related data exists (FK constraint)" },
+          { status: 409 }
+        );
+      }
+    }
+    console.error("DELETE /api/questions/:id failed:", err);
+    return NextResponse.json({ error: "Failed to delete question" }, { status: 500 });
   }
 }
 
-/** Update a question (label, type, required, helpText, options[]) */
-export async function PATCH(req: Request, { params }: Ctx) {
+export async function PUT(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const id = params?.id;
+  if (!id) {
+    return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  }
+
   try {
-    const id = params.id
-    const { label, type, required, helpText, options } = await req.json()
+    const body = await req.json();
 
-    if (!label || !type) {
-      return NextResponse.json({ error: 'label and type are required' }, { status: 400 })
+    const {
+      label,
+      type,
+      required,
+      helpText,
+      // file config (used when type === "FILE")
+      fileAccept,
+      fileMaxSizeMB,
+      fileMultiple,
+      // OPTIONAL: pass options to replace existing ones for RADIO/CHECKBOX/SELECT
+      options,
+    } = body;
+
+    // Build scalar update data (only include keys that were provided)
+    const data: Record<string, any> = {};
+    if (typeof label !== "undefined") data.label = label;
+    if (typeof type !== "undefined") data.type = type;
+    if (typeof required !== "undefined") data.required = required;
+    if (typeof helpText !== "undefined") data.helpText = helpText;
+
+    if (typeof fileAccept !== "undefined") data.fileAccept = fileAccept;
+    if (typeof fileMaxSizeMB !== "undefined") data.fileMaxSizeMB = fileMaxSizeMB;
+    if (typeof fileMultiple !== "undefined") {
+      data.fileMultiple = String(type).toUpperCase() === "FILE" ? fileMultiple : null;
     }
 
-    // If type needs options, validate input
-    const needsOptions = ['radio', 'checkbox', 'select'].includes(type)
-    if (needsOptions && !Array.isArray(options)) {
-      return NextResponse.json({ error: 'options[] required for this type' }, { status: 400 })
-    }
+    // If options are provided AND the type is one that uses options,
+    // replace them atomically inside a transaction.
+    if (Array.isArray(options)) {
+      const typeUsesOptions =
+        typeof type !== "undefined"
+          ? ["RADIO", "CHECKBOX", "SELECT"].includes(type)
+          : // if type isn't changing, check current record's type
+            undefined;
 
-    await prisma.$transaction(async (tx) => {
-      await tx.question.update({
-        where: { id },
-        data: {
-          label,
-          type,
-          required: Boolean(required),
-          helpText: helpText ?? null,
-        },
-      })
+      // We will: delete existing options -> update scalars -> create new options
+      const updated = await prisma.$transaction(async (tx) => {
+        // If caller is replacing options, clear current ones first.
+        await tx.option.deleteMany({ where: { questionId: id } });
 
-      // Replace options if provided
-      if (Array.isArray(options)) {
-        await tx.option.deleteMany({ where: { questionId: id } })
-        if (options.length) {
+        // Update scalar fields
+        const q = await tx.question.update({
+          where: { id },
+          data,
+        });
+
+        // Only recreate options if the question type uses them
+        const shouldCreateOptions =
+          typeUsesOptions === undefined
+            ? ["RADIO", "CHECKBOX", "SELECT"].includes(q.type as any)
+            : typeUsesOptions;
+
+        if (shouldCreateOptions && options.length > 0) {
           await tx.option.createMany({
-            data: options.map((v: string) => ({
+            data: options.map((o: any) => ({
+              label: o.label,
+              value: o.value,
               questionId: id,
-              label: v.trim(),
-              value: v.trim(),
             })),
-          })
+          });
         }
-      }
-    })
 
-    const updated = await prisma.question.findUnique({
+        return q;
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    // No options in payload -> simple scalar update
+    const updated = await prisma.question.update({
       where: { id },
-      include: { options: true },
-    })
-    return NextResponse.json(updated)
-  } catch (e) {
-    console.error('PATCH /api/questions/:id error:', e)
-    return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
+      data,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: unknown) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === "P2025") {
+        return NextResponse.json({ error: "Question not found" }, { status: 404 });
+      }
+    }
+    console.error("PUT /api/questions/:id failed:", err);
+    return NextResponse.json({ error: "Failed to update question" }, { status: 500 });
   }
 }

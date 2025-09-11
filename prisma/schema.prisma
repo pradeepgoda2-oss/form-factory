@@ -17,15 +17,21 @@ model User {
 }
 
 model Question {
-  id        String         @id @default(cuid())
-  label     String
-  helpText  String?
-  type      QuestionType
-  required  Boolean        @default(false)
-  options   Option[]
-  createdAt DateTime       @default(now())
-  formLinks FormQuestion[]
-  Answer    Answer[]
+  id       String       @id @default(cuid())
+  label    String
+  type     QuestionType
+  required Boolean      @default(false)
+  helpText String?
+  options  Option[]
+
+  fileAccept    String?
+  fileMaxSizeMB Int?
+  fileMultiple  Boolean?
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @default(now()) @updatedAt 
+  FormQuestion FormQuestion[]
+  Answer       Answer[]
 }
 
 model Form {
@@ -63,7 +69,7 @@ model Option {
 model Response {
   id        String   @id @default(cuid())
   formId    String
-  userEmail String?            // <— add this line
+  userEmail String? // <— add this line
   createdAt DateTime @default(now())
   answers   Answer[]
   form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
@@ -91,4 +97,5 @@ enum QuestionType {
   select
   number
   date
+  file
 }

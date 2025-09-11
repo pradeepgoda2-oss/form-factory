@@ -1,5 +1,5 @@
 export type QuestionType =
-  | 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'number' | 'date';
+  | 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'number' | 'date' | 'file';
 
 export interface Option {
   id: string;
@@ -14,6 +14,7 @@ export interface Question {
   type: QuestionType;
   required?: boolean;
   options?: Option[];
+  fileMultiple?: boolean;
 }
 
 export interface FormDef {

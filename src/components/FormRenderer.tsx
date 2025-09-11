@@ -8,6 +8,10 @@ type Props = {
   onSubmit?: (payload: Record<string, unknown>) => Promise<void> | void;
 };
 
+const DEFAULT_FILE_ACCEPT = '.jpg,.jpeg,.png,.pdf,.doc,.docx';
+const DEFAULT_FILE_MAX_MB = 10;
+const ALLOWED_EXTS = new Set(['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx']);
+
 export default function FormRenderer({ form, onSubmit }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -20,15 +24,48 @@ export default function FormRenderer({ form, onSubmit }: Props) {
 
     form.questions.forEach((q) => {
       const name = q.id;
+
       if (q.type === 'checkbox') {
         const values = fd.getAll(name).map(String);
         if (q.required && values.length === 0) newErrors[name] = 'Required';
         payload[name] = values;
-      } else {
-        const val = fd.get(name)?.toString() ?? '';
-        if (q.required && !val) newErrors[name] = 'Required';
-        payload[name] = val;
+        return;
       }
+
+      if (q.type === 'file') {
+        const files = fd.getAll(name) as File[];
+        if (q.required && files.length === 0) {
+          newErrors[name] = 'Required';
+          return;
+        }
+
+        // Validate each file: extension + size
+        const maxBytes = DEFAULT_FILE_MAX_MB * 1024 * 1024;
+        for (const f of files) {
+          const ext = (f.name.split('.').pop() || '').toLowerCase();
+          if (!ALLOWED_EXTS.has(ext)) {
+            newErrors[name] = `Only ${DEFAULT_FILE_ACCEPT} allowed`;
+            break;
+          }
+          if (f.size > maxBytes) {
+            newErrors[name] = `Each file must be ≤ ${DEFAULT_FILE_MAX_MB} MB`;
+            break;
+          }
+        }
+
+        // Phase 1: store metadata only (real upload in Phase 2)
+        payload[name] = files.map((f) => ({
+          name: f.name,
+          size: f.size,
+          type: f.type,
+        }));
+        return;
+      }
+
+      // Default single-value fields
+      const val = fd.get(name)?.toString() ?? '';
+      if (q.required && !val) newErrors[name] = 'Required';
+      payload[name] = val;
     });
 
     setErrors(newErrors);
@@ -53,9 +90,14 @@ export default function FormRenderer({ form, onSubmit }: Props) {
   };
 
   const renderField = (q: Question) => {
+    // console.log(q);
     const name = q.id;
     const err = errors[name];
-    const common = { name, id: name, className: `form-control ${err ? 'is-invalid' : ''}` };
+    const common = {
+      name,
+      id: name,
+      className: `form-control ${err ? 'is-invalid' : ''}`,
+    };
 
     switch (q.type) {
       case 'text':
@@ -66,10 +108,16 @@ export default function FormRenderer({ form, onSubmit }: Props) {
         return <textarea rows={4} {...common} />;
       case 'select':
         return (
-          <select className={`form-select ${err ? 'is-invalid' : ''}`} name={name} id={name}>
+          <select
+            className={`form-select ${err ? 'is-invalid' : ''}`}
+            name={name}
+            id={name}
+          >
             <option value="">Select…</option>
             {q.options?.map((o) => (
-              <option key={o.id} value={o.value}>{o.label}</option>
+              <option key={o.id} value={o.value}>
+                {o.label}
+              </option>
             ))}
           </select>
         );
@@ -85,7 +133,12 @@ export default function FormRenderer({ form, onSubmit }: Props) {
                   id={`${name}_${o.id}`}
                   value={o.value}
                 />
-                <label className="form-check-label" htmlFor={`${name}_${o.id}`}>{o.label}</label>
+                <label
+                  className="form-check-label"
+                  htmlFor={`${name}_${o.id}`}
+                >
+                  {o.label}
+                </label>
               </div>
             ))}
           </div>
@@ -102,11 +155,29 @@ export default function FormRenderer({ form, onSubmit }: Props) {
                   id={`${name}_${o.id}`}
                   value={o.value}
                 />
-                <label className="form-check-label" htmlFor={`${name}_${o.id}`}>{o.label}</label>
+                <label
+                  className="form-check-label"
+                  htmlFor={`${name}_${o.id}`}
+                >
+                  {o.label}
+                </label>
               </div>
             ))}
           </div>
         );
+      case 'file': {
+        const errCls = err ? 'is-invalid' : '';
+        return (
+          <input
+            type="file"
+            name={name}
+            id={name}
+            className={`form-control ${errCls}`}
+            accept={DEFAULT_FILE_ACCEPT}
+            multiple={!!q.fileMultiple}
+          />
+        );
+      }
       default:
         return <input type="text" {...common} />;
     }
@@ -115,7 +186,9 @@ export default function FormRenderer({ form, onSubmit }: Props) {
   return (
     <form className="card p-4 shadow border-0" onSubmit={handleSubmit}>
       <h2 className="h4 mb-1">{form.title}</h2>
-      {form.description && <p className="text-secondary mb-4">{form.description}</p>}
+      {form.description && (
+        <p className="text-secondary mb-4">{form.description}</p>
+      )}
 
       {form.questions.map((q) => (
         <div className="mb-3" key={q.id}>
@@ -124,7 +197,9 @@ export default function FormRenderer({ form, onSubmit }: Props) {
           </label>
           {renderField(q)}
           {q.helpText && <div className="form-text">{q.helpText}</div>}
-          {errors[q.id] && <div className="invalid-feedback d-block">{errors[q.id]}</div>}
+          {errors[q.id] && (
+            <div className="invalid-feedback d-block">{errors[q.id]}</div>
+          )}
         </div>
       ))}
 

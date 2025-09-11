@@ -18,16 +18,18 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { label, type, required, helpText, options } = await req.json();
+    const { label, type, required, helpText, options, fileMultiple = null } = await req.json();
     if (!label || !type) {
       return NextResponse.json({ error: 'label and type are required' }, { status: 400 });
     }
+
     const created = await prisma.question.create({
       data: {
         label,
         type,
         required: Boolean(required),
         helpText: helpText ?? null,
+        fileMultiple: String(type).toUpperCase() === "FILE" ? fileMultiple : null,
         ...(Array.isArray(options) && options.length
           ? { options: { create: options.map((v: string) => ({ label: v.trim(), value: v.trim() })) } }
           : {}),
