@@ -19,6 +19,7 @@ model User {
 model Question {
   id       String       @id @default(cuid())
   label    String
+  sortOrder Int @default(0)
   type     QuestionType
   required Boolean      @default(false)
   helpText String?
@@ -39,9 +40,15 @@ model Form {
   slug        String         @unique
   title       String
   description String?
+
+  sortOrder   Int            @default(0)              // ← new (for grid ordering)
   createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt @default(now()) // ← recommended (safe backfill)
+
   questions   FormQuestion[]
   responses   Response[]
+
+  @@index([sortOrder])       // ← helps GET /api/forms order quickly
 }
 
 model FormQuestion {

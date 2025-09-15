@@ -49,6 +49,7 @@ export async function PUT(
     const {
       label,
       type,
+      sortOrder,
       required,
       helpText,
       // file config (used when type === "FILE")
@@ -62,6 +63,7 @@ export async function PUT(
     // Build scalar update data (only include keys that were provided)
     const data: Record<string, any> = {};
     if (typeof label !== "undefined") data.label = label;
+    if (typeof sortOrder !== "undefined") data.sortOrder = sortOrder;
     if (typeof type !== "undefined") data.type = type;
     if (typeof required !== "undefined") data.required = required;
     if (typeof helpText !== "undefined") data.helpText = helpText;

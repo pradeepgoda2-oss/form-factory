@@ -10,7 +10,21 @@ async function getForm(slug: string): Promise<FormDef | null> {
     include: {
       questions: {
         orderBy: { sortOrder: 'asc' },
-        include: { question: { include: { options: true } } },
+        include: {
+          question: {
+            select: {
+              id: true,
+              label: true,
+              type: true,
+              required: true,
+              helpText: true,
+              fileMultiple: true,
+              options: {
+                select: { id: true, label: true, value: true },
+              },
+            },
+          },
+        }
       },
     },
   });
@@ -29,6 +43,7 @@ async function getForm(slug: string): Promise<FormDef | null> {
         helpText: q.helpText ?? undefined,
         type: q.type as any,
         required: q.required,
+        fileMultiple: q.fileMultiple,
         options: q.options.map(o => ({ id: o.id, label: o.label, value: o.value })),
       };
     }),

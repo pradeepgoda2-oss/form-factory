@@ -18,6 +18,7 @@ export default function QuestionBankPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
   const [type, setType] = useState<QuestionType>('text');
+  const [sortOrder, setSortOrder] = useState<number>(0);
   const [required, setRequired] = useState(false);
   const [helpText, setHelpText] = useState('');
   const [optionsInput, setOptionsInput] = useState('');
@@ -68,6 +69,7 @@ export default function QuestionBankPage() {
     setSaving(false);
     setErr(null);
     setFileMultiple(false);
+    setSortOrder(0);
   };
   const openCreateModal = () => { resetModal(); openBtnRef.current?.click(); };
   const openEditModal = (row: Question) => {
@@ -78,6 +80,7 @@ export default function QuestionBankPage() {
     setHelpText(row.helpText || '');
     setOptionsInput(row.options?.map(o => o.label).join(', ') || '');
     setFileMultiple(!!row.fileMultiple);
+    setSortOrder(typeof row.sortOrder === 'number' ? row.sortOrder : 0);
     openBtnRef.current?.click();
   };
 
@@ -102,8 +105,9 @@ export default function QuestionBankPage() {
 
       body.type = String(type).toLowerCase();
 
-// Send allow-multiple only for file questions
+      // Send allow-multiple only for file questions
       if (body.type === 'file') body.fileMultiple = !!fileMultiple;
+      body.sortOrder = Number.isFinite(sortOrder) ? sortOrder : 0;
       const res = await fetch(editId ? `/api/questions/${editId}` : '/api/questions', {
         method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -171,26 +175,46 @@ export default function QuestionBankPage() {
                   <table className="table table-bordered table-striped table-hover mb-0 align-middle gridy">
                     <thead className="table-light">
                       <tr>
-                        <th style={{ width: '34%' }}>Label</th>
-                        <th style={{ width: '12%' }}>Type</th>
-                        <th style={{ width: '12%' }}>Required</th>
+                        <th style={{ width: '5%' }}>S.O</th>
+                        <th style={{ width: '40%' }}>Label</th>
+                        <th style={{ width: '10%' }}>Type</th>
+                        <th style={{ width: '10%' }}>Required</th>
                         <th>Options</th>
-                        <th style={{ width: 160 }}></th>
+                        <th style={{ width: '80px' }}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {filtered.map(row => (
                         <tr key={row.id}>
+                          <td className="text-center">{row.sortOrder ?? 0}</td>
                           <td className="fw-medium">{row.label}</td>
                           <td><span className="badge badge-soft">{row.type}</span></td>
                           <td>{row.required ? 'Yes' : 'No'}</td>
-                          <td className="small col-options" title={row.options?.map(o => o.label).join(', ') || ''}>
-                            {row.options?.length ? row.options.map(o => o.label).join(', ') : <span className="text-secondary">—</span>}
+                          <td
+                            className="small col-options text-wrap"
+                            style={{ whiteSpace: 'normal', maxHeight: '72px', overflowY: 'auto' }}
+                            title={row.options?.map(o => o.label).join(', ') || ''}
+                          >
+                            {row.options?.length
+                              ? row.options.map(o => o.label).join(', ')
+                              : <span className="text-secondary">—</span>}
                           </td>
                           <td className="text-end">
                             <div className="btn-group">
-                              <button className="btn btn-sm btn-outline-secondary" onClick={() => openEditModal(row)}>Edit</button>
-                              <button className="btn btn-sm btn-outline-danger" onClick={() => onDelete(row.id)}>Delete</button>
+                              <button
+                                className="btn btn-sm btn-outline-secondary"
+                                onClick={() => openEditModal(row)}
+                                title="Edit"
+                              >
+                                <i className="bi bi-pencil"></i>
+                              </button>
+                              <button
+                                className="btn btn-sm btn-outline-danger"
+                                onClick={() => onDelete(row.id)}
+                                title="Delete"
+                              >
+                                <i className="bi bi-trash"></i>
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -206,21 +230,41 @@ export default function QuestionBankPage() {
                   <div className="card border-0 shadow-sm mb-3" key={row.id}>
                     <div className="card-body">
                       <div className="d-flex justify-content-between align-items-start">
-                        <div className="fw-semibold">{row.label}</div>
+                        <div>
+                          <div className="fw-semibold">{row.label}</div>
+                          <div className="small text-secondary">S.O: {row.sortOrder ?? 0}</div>
+                        </div>
                         <span className="badge text-bg-light text-uppercase">{row.type}</span>
                       </div>
-                      <div className="small text-secondary mt-1">Required: {row.required ? 'Yes' : 'No'}</div>
+                      <div className="small text-secondary mt-1">
+                        Required: {row.required ? 'Yes' : 'No'}
+                      </div>
                       {row.options?.length ? (
-                        <div className="small mt-2"><strong>Options:</strong> {row.options.map(o => o.label).join(', ')}</div>
+                        <div className="small mt-2">
+                          <strong>Options:</strong> {row.options.map(o => o.label).join(', ')}
+                        </div>
                       ) : null}
                       <div className="mt-3 d-flex justify-content-end gap-2">
-                        <button className="btn btn-sm btn-outline-secondary" onClick={() => openEditModal(row)}>Edit</button>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => onDelete(row.id)}>Delete</button>
+                        <button
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => openEditModal(row)}
+                          title="Edit"
+                        >
+                          <i className="bi bi-pencil"></i>
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => onDelete(row.id)}
+                          title="Delete"
+                        >
+                          <i className="bi bi-trash"></i>
+                        </button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
+
             </>
           )}
         </div>
@@ -237,131 +281,148 @@ export default function QuestionBankPage() {
       </button>
       {/* Modal (Create / Edit) */}
       <div className="modal fade" id="questionModal" tabIndex={-1} aria-hidden="true">
-  <div className="modal-dialog modal-lg modal-dialog-scrollable">
-    <div className="modal-content">
-      <div className="modal-header">
-        <h2 className="modal-title h5 mb-0">
-          {editId ? 'Edit Question' : 'Add a new question'}
-        </h2>
-        <button
-          ref={closeBtnRef}
-          type="button"
-          className="btn-close"
-          data-bs-dismiss="modal"
-          aria-label="Close"
-        />
-      </div>
-
-      <form onSubmit={onSave}>
-        <div className="modal-body">
-          {err && <div className="alert alert-danger">{err}</div>}
-
-          {/* Label - full width */}
-          <div className="mb-3">
-            <label className="form-label">Label</label>
-            <input
-              className="form-control"
-              value={label}
-              onChange={e => setLabel(e.target.value)}
-              required
-              placeholder="e.g. First Name"
-            />
-          </div>
-
-          {/* Compact row for Type + Required, with File block as its own full-width col */}
-          <div className="row g-3">
-            <div className="col-12 col-md-6">
-              <label className="form-label">Type</label>
-              <select
-                className="form-select"
-                value={type}
-                onChange={e => setType(e.target.value as QuestionType)}
-              >
-                {TYPES.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+        <div className="modal-dialog modal-lg modal-dialog-scrollable">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2 className="modal-title h5 mb-0">
+                {editId ? 'Edit Question' : 'Add a new question'}
+              </h2>
+              <button
+                ref={closeBtnRef}
+                type="button"
+                className="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              />
             </div>
 
-            <div className="col-12 col-md-6 d-flex align-items-end">
-              <div className="form-check">
-                <input
-                  id="q_required"
-                  className="form-check-input"
-                  type="checkbox"
-                  checked={required}
-                  onChange={e => setRequired(e.target.checked)}
-                />
-                <label htmlFor="q_required" className="form-check-label ms-1">
-                  Required
-                </label>
-              </div>
-            </div>
+            <form onSubmit={onSave}>
+              <div className="modal-body">
+                {err && <div className="alert alert-danger">{err}</div>}
 
-            {/* File config block (v1: only multiple + hint) */}
-            {isFile && (
-              <div className="col-12">
-                <div className="border rounded p-3 bg-light">
-                  <div className="form-check">
-                    <input
-                      id="fileMultiple"
-                      className="form-check-input"
-                      type="checkbox"
-                      checked={fileMultiple}
-                      onChange={(e) => setFileMultiple(e.target.checked)}
-                    />
-                    <label htmlFor="fileMultiple" className="form-check-label">
-                      Allow multiple files
-                    </label>
+                {/* Label - full width */}
+                <div className="mb-3">
+                  <label className="form-label">Label</label>
+                  <input
+                    className="form-control"
+                    value={label}
+                    onChange={e => setLabel(e.target.value)}
+                    required
+                    placeholder="e.g. First Name"
+                  />
+                </div>
+
+                {/* Compact row for Type + Required, with File block as its own full-width col */}
+                <div className="row g-3 mb-3">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Type</label>
+                    <select
+                      className="form-select"
+                      value={type}
+                      onChange={e => setType(e.target.value as QuestionType)}
+                    >
+                      {TYPES.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="form-text mt-2">
-                    Allowed: JPG, JPEG, PNG, PDF, DOC, DOCX · Max 10 MB per file
+
+                  <div className="col-12 col-md-6 d-flex align-items-end">
+                    <div className="form-check">
+                      <input
+                        id="q_required"
+                        className="form-check-input"
+                        type="checkbox"
+                        checked={required}
+                        onChange={e => setRequired(e.target.checked)}
+                      />
+                      <label htmlFor="q_required" className="form-check-label ms-1">
+                        Required
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* File config block (v1: only multiple + hint) */}
+                  {isFile && (
+                    <div className="col-12 mb-3">
+                      <div className="border rounded p-3 bg-light">
+                        <div className="form-check">
+                          <input
+                            id="fileMultiple"
+                            className="form-check-input"
+                            type="checkbox"
+                            checked={fileMultiple}
+                            onChange={(e) => setFileMultiple(e.target.checked)}
+                          />
+                          <label htmlFor="fileMultiple" className="form-check-label">
+                            Allow multiple files
+                          </label>
+                        </div>
+                        <div className="form-text mt-2">
+                          Allowed: JPG, JPEG, PNG, PDF, DOC, DOCX · Max 10 MB per file
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Help text */}
+                <div className="row g-3">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Sort order</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      min={0}
+                      step={1}
+                      value={Number.isFinite(sortOrder) ? sortOrder : 0}
+                      onChange={(e) => setSortOrder(Number.parseInt(e.target.value || '0', 10))}
+                      placeholder="0"
+                    />
+                    <div className="form-text">Used to order questions in lists.</div>
+                  </div>
+
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Help text (optional)</label>
+                    <input
+                      className="form-control"
+                      value={helpText}
+                      onChange={e => setHelpText(e.target.value)}
+                      placeholder="Shown below the field"
+                    />
                   </div>
                 </div>
+
+                {/* Options input for choice types */}
+                {needsOptions && (
+                  <div className="mb-3">
+                    <label className="form-label">Options (comma-separated)</label>
+                    <input
+                      className="form-control"
+                      placeholder="e.g. Yes, No, Maybe"
+                      value={optionsInput}
+                      onChange={e => setOptionsInput(e.target.value)}
+                    />
+                    <div className="form-text">
+                      Used for <code>radio</code>, <code>checkbox</code>, and <code>select</code> types.
+                    </div>
+                  </div>
+                )}
+
               </div>
-            )}
-          </div>
 
-          {/* Help text */}
-          <div className="mb-3 mt-3">
-            <label className="form-label">Help text (optional)</label>
-            <input
-              className="form-control"
-              value={helpText}
-              onChange={e => setHelpText(e.target.value)}
-              placeholder="Shown below the field"
-            />
-          </div>
-
-          {/* Options input for choice types */}
-          {needsOptions && (
-            <div className="mb-3">
-              <label className="form-label">Options (comma-separated)</label>
-              <input
-                className="form-control"
-                placeholder="e.g. Yes, No, Maybe"
-                value={optionsInput}
-                onChange={e => setOptionsInput(e.target.value)}
-              />
-              <div className="form-text">
-                Used for <code>radio</code>, <code>checkbox</code>, and <code>select</code> types.
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Saving…' : (editId ? 'Save changes' : 'Create question')}
+                </button>
               </div>
-            </div>
-          )}
+            </form>
+          </div>
         </div>
-
-        <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : (editId ? 'Save changes' : 'Create question')}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
+      </div>
 
     </main>
   );

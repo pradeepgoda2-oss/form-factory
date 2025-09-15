@@ -3,6 +3,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import ClientBootstrap from '@/components/ClientBootstrap'
+import 'bootstrap-icons/font/bootstrap-icons.css';
+
 
 export const metadata: Metadata = {
   title: 'Form Factory',

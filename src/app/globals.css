@@ -168,3 +168,8 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Button + icon spacing */
 .btn .icon { margin-right: .4rem; display: inline-block; }
+
+.modal-dialog-scrollable .modal-body {
+  max-height: calc(100vh - 200px); /* leave room for header/footer */
+  overflow-y: auto;
+}

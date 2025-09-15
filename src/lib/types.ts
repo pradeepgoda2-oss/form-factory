@@ -12,6 +12,7 @@ export interface Question {
   label: string;
   helpText?: string;
   type: QuestionType;
+  sortOrder: number;
   required?: boolean;
   options?: Option[];
   fileMultiple?: boolean;

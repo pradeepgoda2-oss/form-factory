@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 export async function GET() {
   try {
     const items = await prisma.question.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: { options: true },
     });
     return NextResponse.json(items);
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { label, type, required, helpText, options, fileMultiple = null } = await req.json();
+    const { label, sortOrder, type, required, helpText, options, fileMultiple = null } = await req.json();
     if (!label || !type) {
       return NextResponse.json({ error: 'label and type are required' }, { status: 400 });
     }
@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     const created = await prisma.question.create({
       data: {
         label,
+        sortOrder,
         type,
         required: Boolean(required),
         helpText: helpText ?? null,
