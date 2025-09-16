@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,22 +15,20 @@ model User {
 }
 
 model Question {
-  id       String       @id @default(cuid())
-  label    String
-  sortOrder Int @default(0)
-  type     QuestionType
-  required Boolean      @default(false)
-  helpText String?
-  options  Option[]
-
+  id            String         @id @default(cuid())
+  label         String
+  helpText      String?
+  type          QuestionType
+  required      Boolean        @default(false)
+  createdAt     DateTime       @default(now())
   fileAccept    String?
   fileMaxSizeMB Int?
   fileMultiple  Boolean?
-
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @default(now()) @updatedAt 
-  FormQuestion FormQuestion[]
-  Answer       Answer[]
+  updatedAt     DateTime       @default(now()) @updatedAt
+  sortOrder     Int            @default(0)
+  Answer        Answer[]
+  FormQuestion  FormQuestion[]
+  options       Option[]
 }
 
 model Form {
@@ -40,27 +36,28 @@ model Form {
   slug        String         @unique
   title       String
   description String?
-
-  sortOrder   Int            @default(0)              // ← new (for grid ordering)
   createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt @default(now()) // ← recommended (safe backfill)
-
+  sortOrder   Int            @default(0)
+  updatedAt   DateTime       @default(now()) @updatedAt
   questions   FormQuestion[]
   responses   Response[]
 
-  @@index([sortOrder])       // ← helps GET /api/forms order quickly
+  @@index([sortOrder])
 }
 
 model FormQuestion {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   formId     String
   questionId String
-  sortOrder  Int    @default(0)
-  rowSpan    Int    @default(1)
-  colSpan    Int    @default(1)
-
-  form     Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0)
+  rowSpan    Int      @default(1)
+  colSpan    Int      @default(1)
+  row        Int      @default(1)
+  col        Int      @default(1)
+  span       Int      @default(12)
+  order      Int?
+  form       Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([formId, questionId])
 }
@@ -76,8 +73,8 @@ model Option {
 model Response {
   id        String   @id @default(cuid())
   formId    String
-  userEmail String? // <— add this line
   createdAt DateTime @default(now())
+  userEmail String?
   answers   Answer[]
   form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
 
@@ -85,13 +82,12 @@ model Response {
 }
 
 model Answer {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   responseId String
   questionId String
   value      String?
-
-  response Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  response   Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
 
   @@unique([responseId, questionId])
 }

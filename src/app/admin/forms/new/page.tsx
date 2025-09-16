@@ -43,9 +43,7 @@ type Question = {
 };
 
 type PreviewItem = {
-  id: string;         // unique instance id (allows duplicates)
-  qid: string;        // underlying question id
-  width: 1 | 2 | 3;   // 1→col-4, 2→col-8, 3→col-12 (MVP mapping)
+  id: string; qid: string; width: 0 | 1 | 2 | 3; align?: 'left' | 'center' | 'right';
 };
 
 type Mode = 'build' | 'preview';
@@ -56,6 +54,40 @@ const BANK_ID = 'bank';
 const PREVIEW_ID = 'preview';
 const makeInstId = () =>
   `inst_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+/* ---------- Helpers ---------- */
+
+function widthToCols(w: 0 | 1 | 2 | 3): 12 | 8 | 6 | 4 {
+  switch (w) {
+    case 3: return 12; // full
+    case 2: return 8;  // 2/3
+    case 0: return 6;  // half
+    case 1:
+    default: return 4; // 1/3
+  }
+}
+
+function packPreviewToItems(preview: PreviewItem[]) {
+  // Left→right packing; each row sums to 12; produces API-ready items
+  let row = 1, col: 1 | 2 | 3 = 1, acc = 0;
+  const items = [];
+  for (const pi of preview) {
+    const span = widthToCols(pi.width) as 12 | 8 | 6 | 4; // same mapping for Bootstrap cols & API span
+    if (acc + span > 12) { row++; col = 1; acc = 0; }
+    items.push({ qid: pi.qid, row, col, span });
+    acc += span;
+    col = (col + 1) as 1 | 2 | 3;
+  }
+  return items;
+}
+
+function shouldInsertAfter(targetId: string, pointerY: number) {
+  const el = document.querySelector<HTMLElement>(`[data-preview-id="${targetId}"]`);
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+  return pointerY > midY; // below the midline → append after
+}
 
 /* ---------- Page ---------- */
 
@@ -75,7 +107,7 @@ export default function NewFormPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
 
-  // Preview
+  // Canvas
   const [preview, setPreview] = useState<PreviewItem[]>([]);
   const previewIds = preview.map(p => p.id); // instance ids
 
@@ -106,7 +138,7 @@ export default function NewFormPage() {
     return () => { ok = false; };
   }, []);
 
-  // URL reflect mode (keeps SPA feel + back button UX)
+  // URL reflect mode
   useEffect(() => {
     const url = new URL(window.location.href);
     url.searchParams.set('mode', mode);
@@ -121,6 +153,15 @@ export default function NewFormPage() {
       x.type.toLowerCase().includes(t)
     );
   }, [bank, q]);
+
+  // Pointer tracking (for top/bottom decision on drop)
+  const [pointerY, setPointerY] = useState<number>(0);
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => setPointerY(e.clientY);
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
+  }, []);
+
 
   const bankIdSet = useMemo(() => new Set(bank.map(b => b.id)), [bank]);
   const getQuestion = (qid: string) => bank.find(b => b.id === qid);
@@ -142,7 +183,10 @@ export default function NewFormPage() {
     // Reorder within preview (instance ids on both sides)
     if (previewIds.includes(fromId) && previewIds.includes(toId)) {
       const oldIndex = previewIds.indexOf(fromId);
-      const newIndex = previewIds.indexOf(toId);
+      const insertAfter = shouldInsertAfter(toId, pointerY);
+      let newIndex = previewIds.indexOf(toId) + (insertAfter ? 1 : 0);
+      // If moving down and inserting after a later index, account for removal shift
+      if (newIndex > oldIndex) newIndex = Math.max(0, newIndex - 1);
       if (oldIndex !== newIndex) setPreview(p => arrayMove(p, oldIndex, newIndex));
       return;
     }
@@ -155,7 +199,9 @@ export default function NewFormPage() {
 
     // From Bank → drop on specific Preview card (insert before)
     if (bankIdSet.has(fromId) && previewIds.includes(toId)) {
-      const insertIndex = previewIds.indexOf(toId);
+      const insertAfter = shouldInsertAfter(toId, pointerY);
+      const baseIndex = previewIds.indexOf(toId);
+      const insertIndex = baseIndex + (insertAfter ? 1 : 0);
       maybeAddToPreview(fromId, insertIndex);
       return;
     }
@@ -168,13 +214,12 @@ export default function NewFormPage() {
   }
 
   function maybeAddToPreview(qid: string, insertIndex: number) {
-    // Duplicate warning
     const already = preview.some(pi => pi.qid === qid);
     if (already) {
       const ok = confirm('This question is already in the form. Add another copy?');
       if (!ok) return;
     }
-    // Default width = 3 (full row / col-12)
+    // Default width = Full (3)
     const inst: PreviewItem = { id: makeInstId(), qid, width: 3 };
     setPreview(p => {
       const next = [...p];
@@ -183,7 +228,7 @@ export default function NewFormPage() {
     });
   }
 
-  function setWidth(instId: string, w: 1 | 2 | 3) {
+  function setWidth(instId: string, w: 0 | 1 | 2 | 3) {
     setPreview(p => p.map(item => (item.id === instId ? { ...item, width: w } : item)));
   }
 
@@ -198,32 +243,32 @@ export default function NewFormPage() {
   }
 
   async function handleSave() {
-    if (!title.trim()) {
-      alert('Please enter a form title.');
-      return;
-    }
-    if (preview.length === 0) {
-      alert('Please add at least one question.');
-      return;
-    }
-    try {
-      const payload = {
-        title: title.trim(),
-        items: preview.map((pi, idx) => ({ qid: pi.qid, width: pi.width, order: idx })),
-      };
-      const res = await fetch('/api/forms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`Save failed (${res.status})`);
-      // After save, go to forms list
-      router.push('/admin/forms');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to save the form. Please try again.');
-    }
+  if (!title.trim()) { alert('Please enter a form title.'); return; }
+  if (preview.length === 0) { alert('Please add at least one question.'); return; }
+
+  try {
+    const payload = {
+      title: title.trim(),
+      items: packPreviewToItems(preview), // -> [{ qid,row,col,span }]
+    };
+
+    const res = await fetch('/api/forms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Save failed (${res.status})`);
+
+    alert('Form saved successfully ✅');
+    // live view page:
+    router.push(`/forms/${data.slug}`);
+  } catch (err: any) {
+    console.error(err);
+    alert(err?.message || 'Failed to save the form. Please try again.');
   }
+}
+
 
   /* ---------- Render ---------- */
 
@@ -241,7 +286,7 @@ export default function NewFormPage() {
         .del-btn {
           position: absolute;
           top: 6px;
-          left: 6px; /* left to avoid overlap with width toggles */
+          left: 6px; /* left to avoid overlap with layout bars */
           visibility: hidden;
           opacity: 0;
           pointer-events: none;
@@ -256,7 +301,38 @@ export default function NewFormPage() {
           pointer-events: auto;
           transform: translateY(0);
         }
-        .ff-width:focus { box-shadow: none !important; }
+
+        /* Mini layout bars */
+        .ff-layout { width: 80px; }
+        .ff-layout .rowopt {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          margin: 4px 0;
+        }
+        .ff-layout .seg {
+          height: 6px;
+          border-radius: 2px;
+          background: #e9ecef;
+          transition: background 0.12s ease-in-out, transform 0.12s ease-in-out;
+        }
+        .ff-layout .seg:hover { background: #cfd6dd; }
+        .ff-layout .seg.active { background: #0d6efd; }
+        .ff-layout .label {
+          width: 34px;
+          font-size: 10px;
+          color: #6c757d;
+          text-align: right;
+        }
+        .ff-layout button {
+          appearance: none;
+          border: 0;
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          line-height: 0;
+          cursor: pointer;
+        }
       `}</style>
 
       {/* Header */}
@@ -291,12 +367,12 @@ export default function NewFormPage() {
           {mode === 'build' ? (
             <>
               <button
-                className="btn btn-outline-secondary btn-sm"
-                onClick={() => setMode('preview')}
-                disabled={preview.length === 0}
-                title="Preview end-user view"
+                className="btn btn-success btn-sm"
+                onClick={handleSave}
+                disabled={preview.length === 0 || !title.trim()}
+                title="Save form"
               >
-                Preview
+                Save
               </button>
               <button
                 className="btn btn-outline-danger btn-sm"
@@ -332,7 +408,7 @@ export default function NewFormPage() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          onDragStart={onDragStart}
+          onDragStart={(e) => setActiveId(String(e.active.id))}
           onDragEnd={onDragEnd}
         >
           <div className="row g-3">
@@ -370,11 +446,11 @@ export default function NewFormPage() {
               </div>
             </div>
 
-            {/* Preview (Right) */}
+            {/* Canvas (Right) */}
             <div className="col-12 col-md-7 col-lg-8">
               <div className="card shadow-sm h-100">
                 <div className="card-header bg-white d-flex justify-content-between align-items-center">
-                  <span className="fw-semibold">A4 Preview (3-column grid)</span>
+                  <span className="fw-semibold">A4 Preview (grid)</span>
                   <small className="text-muted">Drop here • Reorder</small>
                 </div>
                 <div className="card-body">
@@ -384,9 +460,9 @@ export default function NewFormPage() {
                         {preview.map(pi => {
                           const qn = getQuestion(pi.qid);
                           if (!qn) return null;
-                          const col = pi.width === 3 ? 12 : pi.width === 2 ? 8 : 4;
+                          const col = widthToCols(pi.width);
                           return (
-                            <div key={pi.id} className={`col-12 col-md-${col}`}>
+                            <div key={pi.id} className={`col-12 col-md-${col}`} data-preview-id={pi.id}>
                               <SortablePreview id={pi.id}>
                                 <PreviewCard
                                   q={qn}
@@ -425,9 +501,9 @@ export default function NewFormPage() {
                 {preview.map((pi, idx) => {
                   const qn = getQuestion(pi.qid);
                   if (!qn) return null;
-                  const col = pi.width === 3 ? 12 : pi.width === 2 ? 8 : 4;
+                  const col = widthToCols(pi.width);
                   return (
-                    <div key={`${pi.id}_${idx}`} className={`col-12 col-md-${col}`}>
+                    <div key={`${pi.id}_${idx}`} className={`col-12 col-md-${col}`} data-preview-id={pi.id}>
                       <ControlPreview q={qn} />
                     </div>
                   );
@@ -501,7 +577,7 @@ function BankRow({ q, inPreview }: { q: Question; inPreview: boolean }) {
 function PreviewCard({
   q, width, onSetWidth, onDelete,
 }: {
-  q: Question; width: 1 | 2 | 3; onSetWidth: (w: 1 | 2 | 3) => void; onDelete: () => void;
+  q: Question; width: 0 | 1 | 2 | 3; onSetWidth: (w: 0 | 1 | 2 | 3) => void; onDelete: () => void;
 }) {
   return (
     <div className="border rounded p-3 bg-light position-relative card-hover">
@@ -516,35 +592,108 @@ function PreviewCard({
         <i className="bi bi-trash" aria-hidden="true" />
       </button>
 
-      {/* Width toggle */}
-      <div className="d-flex justify-content-end mb-2">
-        <div className="btn-group btn-group-sm" role="group" aria-label="Width">
-          <button
-            type="button"
-            className={`btn ff-width ${width === 3 ? 'btn-primary' : 'btn-outline-secondary'}`}
-            onClick={() => onSetWidth(3)}
-          >
-            Full
-          </button>
-          <button
-            type="button"
-            className={`btn ff-width ${width === 2 ? 'btn-primary' : 'btn-outline-secondary'}`}
-            onClick={() => onSetWidth(2)}
-          >
-            2 cols
-          </button>
-          <button
-            type="button"
-            className={`btn ff-width ${width === 1 ? 'btn-primary' : 'btn-outline-secondary'}`}
-            onClick={() => onSetWidth(1)}
-          >
-            1 col
-          </button>
+      <div className="d-flex gap-3 align-items-start">
+        {/* Control on the LEFT */}
+        <div className="flex-grow-1">
+          <ControlPreview q={q} />
+        </div>
+
+        {/* Hamburger-style bars on the RIGHT (no labels) */}
+        <div className="ff-bars" aria-label="Row layout">
+          {/* Full */}
+          <div className="rowopt">
+            <button onClick={() => onSetWidth(3)} aria-label="Full width">
+              <div className={`seg ${width === 3 ? 'active' : ''}`} style={{ width: 64 }} />
+            </button>
+          </div>
+          {/* 1/2 + 1/2 */}
+          <div className="rowopt">
+            <button onClick={() => onSetWidth(0)} aria-label="Half left">
+              <div className={`seg ${width === 0 ? 'active' : ''}`} style={{ width: 30 }} />
+            </button>
+            <button onClick={() => onSetWidth(0)} aria-label="Half right">
+              <div className={`seg ${width === 0 ? 'active' : ''}`} style={{ width: 30 }} />
+            </button>
+          </div>
+          {/* 1/3 + 1/3 + 1/3 */}
+          <div className="rowopt">
+            <button onClick={() => onSetWidth(1)} aria-label="Third 1">
+              <div className={`seg ${width === 1 ? 'active' : ''}`} style={{ width: 20 }} />
+            </button>
+            <button onClick={() => onSetWidth(1)} aria-label="Third 2">
+              <div className={`seg ${width === 1 ? 'active' : ''}`} style={{ width: 20 }} />
+            </button>
+            <button onClick={() => onSetWidth(1)} aria-label="Third 3">
+              <div className={`seg ${width === 1 ? 'active' : ''}`} style={{ width: 20 }} />
+            </button>
+          </div>
+          {/* 1/3 + 2/3 */}
+          <div className="rowopt">
+            <button onClick={() => onSetWidth(1)} aria-label="1/3 (left)">
+              <div className={`seg ${width === 1 ? 'active' : ''}`} style={{ width: 20 }} />
+            </button>
+            <button onClick={() => onSetWidth(2)} aria-label="2/3 (right)">
+              <div className={`seg ${width === 2 ? 'active' : ''}`} style={{ width: 42 }} />
+            </button>
+          </div>
+          {/* 2/3 + 1/3 */}
+          <div className="rowopt">
+            <button onClick={() => onSetWidth(2)} aria-label="2/3 (left)">
+              <div className={`seg ${width === 2 ? 'active' : ''}`} style={{ width: 42 }} />
+            </button>
+            <button onClick={() => onSetWidth(1)} aria-label="1/3 (right)">
+              <div className={`seg ${width === 1 ? 'active' : ''}`} style={{ width: 20 }} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Actual control preview */}
-      <ControlPreview q={q} />
+      {/* Scoped styles so hover works reliably */}
+      <style jsx>{`
+        .card-hover { position: relative; }
+        .del-btn {
+          position: absolute;
+          top: 6px;
+          left: 6px;
+          visibility: hidden;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity .12s ease-in-out, transform .12s ease-in-out;
+          transform: translateY(-2px);
+          z-index: 2;
+        }
+        .card-hover:hover .del-btn,
+        .del-btn:focus {
+          visibility: visible;
+          opacity: 1;
+          pointer-events: auto;
+          transform: translateY(0);
+        }
+        .ff-bars { width: 72px; }
+        .ff-bars .rowopt {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin: 6px 0;
+        }
+        .ff-bars button {
+          appearance: none;
+          border: 0;
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          line-height: 0;
+          cursor: pointer;
+        }
+        .ff-bars .seg {
+          height: 4px;                 /* thin pill (hamburger style) */
+          border-radius: 999px;
+          background: #e9ecef;
+          transition: background .12s ease-in-out, transform .12s ease-in-out;
+        }
+        .ff-bars .seg:hover { background: #cfd6dd; }
+        .ff-bars .seg.active { background: #0d6efd; } /* brand color when selected */
+      `}</style>
     </div>
   );
 }
@@ -554,9 +703,9 @@ function ControlPreview({ q }: { q: Question }) {
   const opts = q.options && q.options.length > 0
     ? q.options
     : [
-        { label: 'Option A', value: 'A' },
-        { label: 'Option B', value: 'B' },
-      ];
+      { label: 'Option A', value: 'A' },
+      { label: 'Option B', value: 'B' },
+    ];
 
   const Help = q.helpText ? (
     <i
@@ -689,11 +838,8 @@ function renderGhostLabel(
   bank: Question[],
   preview: PreviewItem[]
 ): string {
-  // If dragging from bank, activeId is a question id
   const fromBank = bank.find(b => b.id === activeId);
   if (fromBank) return fromBank.label;
-
-  // If dragging within preview, activeId is an instance id
   const inst = preview.find(p => p.id === activeId);
   if (inst) {
     const qn = bank.find(b => b.id === inst.qid);

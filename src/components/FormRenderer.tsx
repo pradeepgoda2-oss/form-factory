@@ -1,10 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FormDef, Question } from '@/lib/types';
 
 type Props = {
-  form: FormDef;
+  form: FormDef & {
+    items: Array<{
+      id?: string;                 // optional placement id
+      qid: string;                 // Question id
+      row: number;
+      col: 1 | 2 | 3;
+      span: 12 | 8 | 6 | 4;        // bootstrap 12-grid sizing
+      question: Question;          // joined question (required)
+      order?: number | null;
+    }>;
+  };
   onSubmit?: (payload: Record<string, unknown>) => Promise<void> | void;
 };
 
@@ -16,13 +26,43 @@ export default function FormRenderer({ form, onSubmit }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  console.log('form', form);
+  // Build layout rows from items (group by row, then sort by col,order)
+  const rows = useMemo(() => {
+    const byRow = new Map<number, Props['form']['items']>();
+    form.items?.forEach(it => {
+      const arr = byRow.get(it.row) ?? [];
+      arr.push(it);
+      byRow.set(it.row, arr);
+    });
+    return [...byRow.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, arr]) =>
+        arr.sort((a, b) => a.col - b.col || (a.order ?? 0) - (b.order ?? 0))
+      );
+  }, [form.items]);
+
+  // Unique questions used (validation + payload keys remain by question.id)
+  const usedQuestions: Question[] = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Question[] = [];
+    rows.flat().forEach(it => {
+      const q = it.question;
+      if (q && !seen.has(q.id)) {
+        seen.add(q.id);
+        out.push(q);
+      }
+    });
+    return out;
+  }, [rows]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const payload: Record<string, unknown> = {};
     const newErrors: Record<string, string> = {};
 
-    form.questions.forEach((q) => {
+    usedQuestions.forEach((q) => {
       const name = q.id;
 
       if (q.type === 'checkbox') {
@@ -39,7 +79,6 @@ export default function FormRenderer({ form, onSubmit }: Props) {
           return;
         }
 
-        // Validate each file: extension + size
         const maxBytes = DEFAULT_FILE_MAX_MB * 1024 * 1024;
         for (const f of files) {
           const ext = (f.name.split('.').pop() || '').toLowerCase();
@@ -53,7 +92,7 @@ export default function FormRenderer({ form, onSubmit }: Props) {
           }
         }
 
-        // Phase 1: store metadata only (real upload in Phase 2)
+        // Phase 1: metadata only; real upload pipeline later
         payload[name] = files.map((f) => ({
           name: f.name,
           size: f.size,
@@ -90,7 +129,7 @@ export default function FormRenderer({ form, onSubmit }: Props) {
   };
 
   const renderField = (q: Question) => {
-    // console.log(q);
+    console.log('question', q);
     const name = q.id;
     const err = errors[name];
     const common = {
@@ -115,7 +154,7 @@ export default function FormRenderer({ form, onSubmit }: Props) {
           >
             <option value="">Select…</option>
             {q.options?.map((o) => (
-              <option key={o.id} value={o.value}>
+              <option key={`${o.id ?? o.value}`} value={o.value}>
                 {o.label}
               </option>
             ))}
@@ -125,17 +164,17 @@ export default function FormRenderer({ form, onSubmit }: Props) {
         return (
           <div>
             {q.options?.map((o) => (
-              <div className="form-check" key={o.id}>
+              <div className="form-check" key={`${o.id ?? o.value}`}>
                 <input
                   className={`form-check-input ${err ? 'is-invalid' : ''}`}
                   type="radio"
                   name={name}
-                  id={`${name}_${o.id}`}
+                  id={`${name}_${o.id ?? o.value}`}
                   value={o.value}
                 />
                 <label
                   className="form-check-label"
-                  htmlFor={`${name}_${o.id}`}
+                  htmlFor={`${name}_${o.id ?? o.value}`}
                 >
                   {o.label}
                 </label>
@@ -147,17 +186,17 @@ export default function FormRenderer({ form, onSubmit }: Props) {
         return (
           <div>
             {q.options?.map((o) => (
-              <div className="form-check" key={o.id}>
+              <div className="form-check" key={`${o.id ?? o.value}`}>
                 <input
                   className={`form-check-input ${err ? 'is-invalid' : ''}`}
                   type="checkbox"
                   name={name}
-                  id={`${name}_${o.id}`}
+                  id={`${name}_${o.id ?? o.value}`}
                   value={o.value}
                 />
                 <label
                   className="form-check-label"
-                  htmlFor={`${name}_${o.id}`}
+                  htmlFor={`${name}_${o.id ?? o.value}`}
                 >
                   {o.label}
                 </label>
@@ -190,16 +229,31 @@ export default function FormRenderer({ form, onSubmit }: Props) {
         <p className="text-secondary mb-4">{form.description}</p>
       )}
 
-      {form.questions.map((q) => (
-        <div className="mb-3" key={q.id}>
-          <label htmlFor={q.id} className="form-label">
-            {q.label} {q.required ? <span className="text-danger">*</span> : null}
-          </label>
-          {renderField(q)}
-          {q.helpText && <div className="form-text">{q.helpText}</div>}
-          {errors[q.id] && (
-            <div className="invalid-feedback d-block">{errors[q.id]}</div>
-          )}
+      {/* Render rows and spans strictly from form.items */}
+      {rows.map((rowItems, rIdx) => (
+        <div className="row g-3" key={`row_${rIdx}`}>
+          {rowItems.map((it, cIdx) => {
+            const q = it.question;
+            const span = it.span;
+            const colCls = `col-12 col-md-${span}`;
+            return (
+              <div className={colCls} key={`${it.qid}_${rIdx}_${cIdx}`}>
+                <div className="mb-3">
+                  <label htmlFor={q.id} className="form-label">
+                    {q.label}{' '}
+                    {q.required ? <span className="text-danger">*</span> : null}
+                  </label>
+                  {renderField(q)}
+                  {q.helpText && <div className="form-text">{q.helpText}</div>}
+                  {errors[q.id] && (
+                    <div className="invalid-feedback d-block">
+                      {errors[q.id]}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ))}
 
