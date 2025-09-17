@@ -8,10 +8,10 @@ export default async function FormViewPage({ params }: { params: { slug: string 
         where: { slug: params.slug },
         include: {
             questions: {
-                orderBy: [{ row: "asc" }, { col: "asc" }, { order: "asc" }],
-                include: { question: true },
+                orderBy: [{ row: 'asc' }, { col: 'asc' }, { order: 'asc' }],
+                include: { question: { include: { options: true } } }, // <-- important
             },
-        },
+        }
     });
 
     if (!form) notFound();

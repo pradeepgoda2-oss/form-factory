@@ -173,3 +173,14 @@ h1, h2, h3, h4, h5, h6 {
   max-height: calc(100vh - 200px); /* leave room for header/footer */
   overflow-y: auto;
 }
+
+.row-drop-zone {
+  height: 10px;
+  margin: 6px 0;
+  border-top: 2px dotted #0d6efd;
+  opacity: 0.4;
+  transition: opacity 0.15s ease-in-out;
+}
+.row-drop-zone.active {
+  opacity: 1;
+}
