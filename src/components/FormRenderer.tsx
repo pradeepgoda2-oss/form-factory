@@ -3,33 +3,60 @@
 import { useMemo, useState } from 'react';
 import { FormDef, Question } from '@/lib/types';
 
-type Props = {
-  form: FormDef & {
-    items: Array<{
-      id?: string;                 // optional placement id
-      qid: string;                 // Question id
-      row: number;
-      col: 1 | 2 | 3;
-      span: 12 | 8 | 6 | 4;        // bootstrap 12-grid sizing
-      question: Question;          // joined question (required)
-      order?: number | null;
-    }>;
-  };
-  onSubmit?: (payload: Record<string, unknown>) => Promise<void> | void;
+/* ============================
+   Types
+   ============================ */
+
+type FormItem = {
+  id?: string;
+  qid: string;
+  row: number;
+  col: 1 | 2 | 3;
+  span: 12 | 8 | 6 | 4;
+  question: Question;    // joined question (required)
+  order?: number | null;
 };
+
+type Props = {
+  form: FormDef & { items: FormItem[] };
+  /** fill = interactive; preview = disabled controls; review = Q&A view */
+  mode?: 'fill' | 'preview' | 'review';
+  /** For review: answers to display. Also used as initial values for fill/preview. */
+  answers?: Record<string, unknown>;
+  /** Called only in mode="fill" when validation passes */
+  onSubmit?: (payload: Record<string, unknown>) => Promise<void> | void;
+  /** Show help text under fields (default: true) */
+  showHelp?: boolean;
+};
+
+/* ============================
+   Constants
+   ============================ */
 
 const DEFAULT_FILE_ACCEPT = '.jpg,.jpeg,.png,.pdf,.doc,.docx';
 const DEFAULT_FILE_MAX_MB = 10;
 const ALLOWED_EXTS = new Set(['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx']);
 
-export default function FormRenderer({ form, onSubmit }: Props) {
+/* ============================
+   Component
+   ============================ */
+
+export default function FormRenderer({
+  form,
+  mode = 'fill',
+  answers,
+  onSubmit,
+  showHelp = true,
+}: Props) {
+  const readOnly = mode === 'preview';
+  const review = mode === 'review';
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  console.log('form', form);
-  // Build layout rows from items (group by row, then sort by col,order)
+  // Build layout rows from items (group by row, then sort by col, order)
   const rows = useMemo(() => {
-    const byRow = new Map<number, Props['form']['items']>();
+    const byRow = new Map<number, FormItem[]>();
     form.items?.forEach(it => {
       const arr = byRow.get(it.row) ?? [];
       arr.push(it);
@@ -56,8 +83,11 @@ export default function FormRenderer({ form, onSubmit }: Props) {
     return out;
   }, [rows]);
 
+  /* ---------- Submit (fill mode only) ---------- */
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (readOnly || review) return; // block in preview/review
+
     const fd = new FormData(e.currentTarget);
     const payload: Record<string, unknown> = {};
     const newErrors: Record<string, string> = {};
@@ -76,19 +106,18 @@ export default function FormRenderer({ form, onSubmit }: Props) {
         const files = fd.getAll(name) as File[];
         if (q.required && files.length === 0) {
           newErrors[name] = 'Required';
-          return;
-        }
-
-        const maxBytes = DEFAULT_FILE_MAX_MB * 1024 * 1024;
-        for (const f of files) {
-          const ext = (f.name.split('.').pop() || '').toLowerCase();
-          if (!ALLOWED_EXTS.has(ext)) {
-            newErrors[name] = `Only ${DEFAULT_FILE_ACCEPT} allowed`;
-            break;
-          }
-          if (f.size > maxBytes) {
-            newErrors[name] = `Each file must be ≤ ${DEFAULT_FILE_MAX_MB} MB`;
-            break;
+        } else if (files.length > 0) {
+          const maxBytes = DEFAULT_FILE_MAX_MB * 1024 * 1024;
+          for (const f of files) {
+            const ext = (f.name.split('.').pop() || '').toLowerCase();
+            if (!ALLOWED_EXTS.has(ext)) {
+              newErrors[name] = `Only ${DEFAULT_FILE_ACCEPT} allowed`;
+              break;
+            }
+            if (f.size > maxBytes) {
+              newErrors[name] = `Each file must be ≤ ${DEFAULT_FILE_MAX_MB} MB`;
+              break;
+            }
           }
         }
 
@@ -128,29 +157,94 @@ export default function FormRenderer({ form, onSubmit }: Props) {
     }
   };
 
-  const renderField = (q: Question) => {
-    console.log('question', q);
+  /* ---------- Helpers ---------- */
+
+  // map stored values to option labels for radio/select/checkbox
+  function valuesToLabels(q: Question, v: unknown): string {
+    const opts = q.options ?? [];
+    if (q.type === 'checkbox') {
+      const arr = Array.isArray(v) ? v : [];
+      const labels = arr
+        .map(val => opts.find(o => o.value === String(val))?.label)
+        .filter(Boolean) as string[];
+      return labels.length ? labels.join(', ') : '—';
+    }
+    if (q.type === 'radio' || q.type === 'select') {
+      const s = v == null ? '' : String(v);
+      const label = opts.find(o => o.value === s)?.label;
+      return label || (s || '—');
+    }
+    if (q.type === 'file') {
+      const files = Array.isArray(v) ? v as any[] : [];
+      if (!files.length) return '—';
+      return files.map((f: any) => f?.name ?? '[file]').join(', ');
+    }
+    // text/number/date/textarea
+    const s = v == null ? '' : String(v);
+    return s || '—';
+  }
+
+  const roAttrs = readOnly ? { disabled: true, 'aria-disabled': true } : {};
+
+  // Initial values for fill/preview (unchecked if none)
+  function hasInitial(name: string, value?: string) {
+    if (!answers) return false;
+    const v = answers[name];
+    if (Array.isArray(v)) return value ? v.includes(value) : v.length > 0;
+    return value ? String(v) === value : !!v;
+  }
+
+  /* ---------- Field renderers ---------- */
+
+  function renderField(q: Question) {
     const name = q.id;
     const err = errors[name];
-    const common = {
-      name,
-      id: name,
-      className: `form-control ${err ? 'is-invalid' : ''}`,
-    };
+    const baseCls = q.type === 'select' ? 'form-select' : 'form-control';
+
+    if (review) {
+      const display = valuesToLabels(q, answers?.[name]);
+      return (
+        <div className="ff-review-answer">
+          <span className="text-body">{display}</span>
+        </div>
+      );
+    }
 
     switch (q.type) {
       case 'text':
       case 'number':
       case 'date':
-        return <input type={q.type} {...common} />;
+        return (
+          <input
+            type={q.type}
+            name={name}
+            id={name}
+            className={`${baseCls} ${err ? 'is-invalid' : ''}`}
+            defaultValue={typeof answers?.[name] === 'string' || typeof answers?.[name] === 'number' ? String(answers?.[name]) : ''}
+            {...roAttrs}
+          />
+        );
+
       case 'textarea':
-        return <textarea rows={4} {...common} />;
+        return (
+          <textarea
+            rows={4}
+            name={name}
+            id={name}
+            className={`${baseCls} ${err ? 'is-invalid' : ''}`}
+            defaultValue={typeof answers?.[name] === 'string' ? String(answers?.[name]) : ''}
+            {...roAttrs}
+          />
+        );
+
       case 'select':
         return (
           <select
-            className={`form-select ${err ? 'is-invalid' : ''}`}
+            className={`${baseCls} ${err ? 'is-invalid' : ''}`}
             name={name}
             id={name}
+            defaultValue={typeof answers?.[name] === 'string' ? String(answers?.[name]) : ''}
+            {...roAttrs}
           >
             <option value="">Select…</option>
             {q.options?.map((o) => (
@@ -160,6 +254,7 @@ export default function FormRenderer({ form, onSubmit }: Props) {
             ))}
           </select>
         );
+
       case 'radio':
         return (
           <div>
@@ -171,17 +266,17 @@ export default function FormRenderer({ form, onSubmit }: Props) {
                   name={name}
                   id={`${name}_${o.id ?? o.value}`}
                   value={o.value}
+                  defaultChecked={hasInitial(name, o.value)}
+                  {...roAttrs}
                 />
-                <label
-                  className="form-check-label"
-                  htmlFor={`${name}_${o.id ?? o.value}`}
-                >
+                <label className="form-check-label" htmlFor={`${name}_${o.id ?? o.value}`}>
                   {o.label}
                 </label>
               </div>
             ))}
           </div>
         );
+
       case 'checkbox':
         return (
           <div>
@@ -193,17 +288,17 @@ export default function FormRenderer({ form, onSubmit }: Props) {
                   name={name}
                   id={`${name}_${o.id ?? o.value}`}
                   value={o.value}
+                  defaultChecked={hasInitial(name, o.value)}
+                  {...roAttrs}
                 />
-                <label
-                  className="form-check-label"
-                  htmlFor={`${name}_${o.id ?? o.value}`}
-                >
+                <label className="form-check-label" htmlFor={`${name}_${o.id ?? o.value}`}>
                   {o.label}
                 </label>
               </div>
             ))}
           </div>
         );
+
       case 'file': {
         const errCls = err ? 'is-invalid' : '';
         return (
@@ -214,13 +309,25 @@ export default function FormRenderer({ form, onSubmit }: Props) {
             className={`form-control ${errCls}`}
             accept={DEFAULT_FILE_ACCEPT}
             multiple={!!q.fileMultiple}
+            {...roAttrs}
           />
         );
       }
+
       default:
-        return <input type="text" {...common} />;
+        return (
+          <input
+            type="text"
+            name={name}
+            id={name}
+            className={`${baseCls} ${err ? 'is-invalid' : ''}`}
+            {...roAttrs}
+          />
+        );
     }
-  };
+  }
+
+  /* ---------- Render ---------- */
 
   return (
     <form className="card p-4 shadow border-0" onSubmit={handleSubmit}>
@@ -236,6 +343,12 @@ export default function FormRenderer({ form, onSubmit }: Props) {
             const q = it.question;
             const span = it.span;
             const colCls = `col-12 col-md-${span}`;
+            const err = errors[q.id];
+
+            const Help = q.helpText ? (
+              <div className="form-text">{q.helpText}</div>
+            ) : null;
+
             return (
               <div className={colCls} key={`${it.qid}_${rIdx}_${cIdx}`}>
                 <div className="mb-3">
@@ -243,12 +356,12 @@ export default function FormRenderer({ form, onSubmit }: Props) {
                     {q.label}{' '}
                     {q.required ? <span className="text-danger">*</span> : null}
                   </label>
+
                   {renderField(q)}
-                  {q.helpText && <div className="form-text">{q.helpText}</div>}
-                  {errors[q.id] && (
-                    <div className="invalid-feedback d-block">
-                      {errors[q.id]}
-                    </div>
+
+                  {showHelp && !review && Help}
+                  {!review && err && (
+                    <div className="invalid-feedback d-block">{err}</div>
                   )}
                 </div>
               </div>
@@ -257,9 +370,16 @@ export default function FormRenderer({ form, onSubmit }: Props) {
         </div>
       ))}
 
-      <button className="btn btn-primary" type="submit" disabled={submitting}>
-        {submitting ? 'Submitting…' : 'Submit'}
-      </button>
+      {/* Footer actions */}
+      {mode === 'fill' ? (
+        <button className="btn btn-primary" type="submit" disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit'}
+        </button>
+      ) : mode === 'preview' ? (
+        <button className="btn btn-secondary" type="button" disabled>
+          Preview
+        </button>
+      ) : null}
     </form>
   );
 }

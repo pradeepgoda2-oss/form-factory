@@ -81,7 +81,7 @@ export default function AdminFormsPage() {
                   <tr key={r.id}>
                     <td>{r.sortOrder}</td>
                     <td>
-                      <Link href={`/admin/forms/${r.slug}`} className="text-decoration-none">
+                      <Link href={`/forms/${r.slug}`} className="text-decoration-none">
                         {r.title}
                       </Link>
                     </td>
