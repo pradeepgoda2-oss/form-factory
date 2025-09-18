@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import FormRenderer from "@/components/FormRenderer";
 
-export default async function FormViewPage({ params }: { params: { slug: string } }) {
+export default async function FormViewPage( { params }: { params: Promise<{ slug: string }> }) {
+    const { slug } = await params;
     const form = await prisma.form.findUnique({
-        where: { slug: params.slug },
+        where: { slug },
         include: {
             questions: {
                 orderBy: [{ row: 'asc' }, { col: 'asc' }, { order: 'asc' }],

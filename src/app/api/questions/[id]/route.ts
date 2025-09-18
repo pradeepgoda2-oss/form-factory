@@ -34,6 +34,9 @@ export async function DELETE(
   }
 }
 
+
+
+
 export async function PUT(
   req: Request,
   { params }: { params: { id: string } }
@@ -76,10 +79,11 @@ export async function PUT(
 
     // If options are provided AND the type is one that uses options,
     // replace them atomically inside a transaction.
+    const optionsTypes = ["radio", "checkbox", "select"];
     if (Array.isArray(options)) {
       const typeUsesOptions =
         typeof type !== "undefined"
-          ? ["RADIO", "CHECKBOX", "SELECT"].includes(type)
+          ? optionsTypes.includes(type)
           : // if type isn't changing, check current record's type
             undefined;
 
@@ -97,16 +101,12 @@ export async function PUT(
         // Only recreate options if the question type uses them
         const shouldCreateOptions =
           typeUsesOptions === undefined
-            ? ["RADIO", "CHECKBOX", "SELECT"].includes(q.type as any)
+            ? optionsTypes.includes(q.type)
             : typeUsesOptions;
 
         if (shouldCreateOptions && options.length > 0) {
           await tx.option.createMany({
-            data: options.map((o: any) => ({
-              label: o.label,
-              value: o.value,
-              questionId: id,
-            })),
+            data: options.map((v: string) => ({ label: v.trim(), value: v.trim(), questionId: id})),
           });
         }
 

@@ -340,7 +340,7 @@ export default function FormBuilder({ slug }: { slug?: string }) {
       const payload = { title: title.trim(), items: packPreviewToItems(preview) };
       const url = slug ? `/api/forms/${encodeURIComponent(slug)}` : '/api/forms';
       const res = await fetch(url, {
-        method: 'POST',
+        method: slug ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });

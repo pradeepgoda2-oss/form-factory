@@ -71,14 +71,13 @@ model Option {
 }
 
 model Response {
-  id        String   @id @default(cuid())
-  formId    String
-  createdAt DateTime @default(now())
-  userEmail String?
-  answers   Answer[]
-  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
-
-  @@index([formId, createdAt])
+  id         String   @id @default(cuid())
+  formId     String
+  createdAt  DateTime @default(now())
+  name       String?          // ← new
+  email      String?          // ← new
+  answers    Answer[]
+  form       Form     @relation(fields: [formId], references: [id])
 }
 
 model Answer {

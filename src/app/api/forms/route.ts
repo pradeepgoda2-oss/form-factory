@@ -12,18 +12,6 @@ function slugify(input: string) {
         .replace(/^-+|-+$/g, '');
 }
 
-async function uniqueSlug(base: string) {
-    let candidate = base || 'form';
-    let i = 1;
-    // Try candidate, candidate-2, candidate-3, ...
-    while (true) {
-        const exists = await prisma.form.findUnique({ where: { slug: candidate } });
-        if (!exists) return candidate;
-        i += 1;
-        candidate = `${base}-${i}`;
-    }
-}
-
 export async function GET() {
     try {
         const forms = await prisma.form.findMany({

@@ -6,13 +6,13 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
   try {
-    const { formId, answers, userEmail } = await req.json();
+    const { formId, answers, email } = await req.json();
     if (!formId || !answers) {
       return NextResponse.json({ error: 'Missing formId or answers' }, { status: 400 });
     }
 
     const response = await prisma.response.create({
-      data: { formId, userEmail: userEmail ?? null },
+      data: { formId, email: email ?? null },
     });
 
     const entries = Object.entries(answers as Record<string, unknown>);
