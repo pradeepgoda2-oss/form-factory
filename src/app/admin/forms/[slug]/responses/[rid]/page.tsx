@@ -48,7 +48,7 @@ export default async function ResponseViewPage({
     }));
 
     return (
-        <div className="container py-4">
+        <div className="container py-3" style={{ maxWidth: 820 }}>
             <h1 className="h5 mb-3">{form.title} — Response</h1>
             <FormRenderer form={{ id: form.id, title: form.title, items }} mode="review" answers={answersMap} />
         </div>

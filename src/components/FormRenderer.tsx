@@ -331,9 +331,9 @@ export default function FormRenderer({
 
   return (
     <form className="card p-4 shadow border-0" onSubmit={handleSubmit}>
-      <h2 className="h4 mb-1">{form.title}</h2>
+      <h2 className="h4 mb-1 text-center">{form.title}</h2>
       {form.description && (
-        <p className="text-secondary mb-4">{form.description}</p>
+        <p className="text-secondary mb-4 text-center">{form.description}</p>
       )}
 
       {/* Render rows and spans strictly from form.items */}

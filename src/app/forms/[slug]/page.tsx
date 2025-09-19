@@ -29,7 +29,7 @@ export default async function FormViewPage( { params }: { params: Promise<{ slug
     }));
 
     return (
-        <div className="container py-3">
+        <div className="container py-3" style={{ maxWidth: 820 }}>
             <FormRenderer
                 form={{ id: form.id, slug: form.slug, title: form.title, description: form.description ?? null, items }}
 

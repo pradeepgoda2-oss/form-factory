@@ -11,7 +11,7 @@
   --ff-bg: #F4F6F8;
   --ff-surface: #FFFFFF;
   --ff-text-primary: #212121;
-  --ff-text-secondary: #6C757D;
+  --ff-text-secondary: #212121;
 
   /* Bootstrap variable overrides */
   --bs-body-bg: var(--ff-bg);
@@ -32,6 +32,40 @@
   font-weight: 500;
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
+
+:root {
+  /* Brand color */
+  --ff-primary: #2E7D7F;
+}
+
+/* Override Bootstrap’s primary to match brand */
+.btn-primary {
+  --bs-btn-bg: var(--ff-primary);
+  --bs-btn-border-color: var(--ff-primary);
+  --bs-btn-hover-bg: #256566;
+  --bs-btn-hover-border-color: #256566;
+}
+
+.text-primary-ff {
+  color: var(--ff-primary) !important;
+}
+
+/* Feature card tint background */
+.bg-ff-tint {
+  background-color: rgba(46, 125, 127, 0.06);
+}
+
+/* Page background */
+body {
+  background: linear-gradient(
+    135deg,
+    rgba(46, 125, 127, 0.15) 0%,
+    rgba(46, 125, 127, 0.05) 100%
+  );
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
 
 .btn-primary:hover {
   background-color: var(--ff-primary-dark) !important;
@@ -72,7 +106,7 @@
 
 /* Headings */
 h1, h2, h3, h4, h5, h6 {
-  color: var(--ff-text-primary);
+  color: var(--ff-primary);
   font-weight: 600;
 }
 
@@ -184,3 +218,31 @@ h1, h2, h3, h4, h5, h6 {
 .row-drop-zone.active {
   opacity: 1;
 }
+
+/* Active underline for navbar links */
+.ff-nav-underline {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 3px;
+  background: var(--ff-primary, var(--bs-primary));
+  border-radius: 999px;
+}
+
+/* Subtle separators between admin nav items */
+.ff-sep { position: relative; }
+.ff-sep::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 1.25rem;
+  background: var(--bs-border-color, rgba(0,0,0,.1));
+  opacity: 0.6;
+}
+
+/* Optional: ensure link colors feel consistent */
+.ff-nav .nav-link.active { font-weight: 600; }
